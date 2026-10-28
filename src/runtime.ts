@@ -1,4 +1,7 @@
-import type { PitchScriptAdapter } from "./adapter.js";
+import type {
+  CreateClubInput,
+  PitchScriptAdapter,
+} from "./adapter.js";
 import type { PitchScriptCommand } from "./parser.js";
 
 export async function executeCommand(
@@ -43,9 +46,7 @@ export async function executeCommand(
     case "LIST": {
       const clubs = await adapter.listClubs();
 
-      return clubs
-        .map((club) => club.name)
-        .join("\n");
+      return clubs.map((club) => club.name).join("\n");
     }
 
     case "UPDATE": {
@@ -67,9 +68,7 @@ export async function executeCommand(
       );
 
       if (!updatedClub) {
-        throw new Error(
-          `Club "${name}" was not found.`,
-        );
+        throw new Error(`Club "${name}" was not found.`);
       }
 
       return `Updated ${updatedClub.name}: ${property} = ${value}`;
@@ -79,25 +78,39 @@ export async function executeCommand(
       const [name] = command.arguments;
 
       if (!name) {
-        throw new Error(
-          "DELETE requires a club name.",
-        );
+        throw new Error("DELETE requires a club name.");
       }
 
       const deleted = await adapter.deleteClub(name);
 
       if (!deleted) {
-        throw new Error(
-          `Club "${name}" was not found.`,
-        );
+        throw new Error(`Club "${name}" was not found.`);
       }
 
       return `Deleted club "${name}".`;
     }
 
-    case "CREATE":
-      throw new Error(
-        "CREATE execution is not implemented yet.",
-      );
+    case "CREATE": {
+      const [name, rarity, ...countryParts] =
+        command.arguments;
+
+      if (!name || !rarity) {
+        throw new Error(
+          "CREATE requires a club name and rarity.",
+        );
+      }
+
+      const input: CreateClubInput = {
+        name,
+        rarity,
+        ...(countryParts.length > 0
+          ? { country: countryParts.join(" ") }
+          : {}),
+      };
+
+      const createdClub = await adapter.createClub(input);
+
+      return `Created club "${createdClub.name}" with rarity ${createdClub.rarity}.`;
+    }
   }
 }
