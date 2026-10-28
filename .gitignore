@@ -6,21 +6,26 @@ dist/
 build/
 coverage/
 
-# Environment variables
+# Environment files
 .env
 .env.*
 !.env.example
 
 # Logs
 *.log
+npm-debug.log*
+pnpm-debug.log*
 
 # TypeScript
 *.tsbuildinfo
+
+# Saved eval presets
+eval_presets/
 
 # IDEs
 .vscode/
 .idea/
 
-# OS files
+# Operating system files
 .DS_Store
 Thumbs.db
