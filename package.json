@@ -1,7 +1,7 @@
 {
   "name": "pitchscript",
   "version": "0.1.0",
-  "description": "A TypeScript-native DexScript implementation for FCDex",
+  "description": "A TypeScript implementation of the DexScript DSL for FCDex",
   "license": "MIT",
   "type": "module",
   "main": "./dist/index.js",
@@ -16,12 +16,14 @@
     "dist"
   ],
   "scripts": {
-    "build": "tsc",
-    "test": "vitest run",
-    "test:watch": "vitest"
+    "build": "tsc -p tsconfig.json",
+    "test": "vitest run"
+  },
+  "engines": {
+    "node": ">=20"
   },
   "devDependencies": {
-    "typescript": "^5.9.0",
+    "typescript": "^5.9.3",
     "vitest": "^3.2.0"
   }
 }
