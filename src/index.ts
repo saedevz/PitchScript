@@ -3,6 +3,9 @@ export { PitchScriptDispatcher } from "./dispatcher.js";
 
 export { createGlobalCommands } from "./commands/global.js";
 export { createFilterCommands } from "./commands/filter.js";
+export { createEvalCommands } from "./commands/eval.js";
+export { createFileCommands } from "./commands/file.js";
+export { createTemplateCommands } from "./commands/template.js";
 
 export {
   runPitchScript,
