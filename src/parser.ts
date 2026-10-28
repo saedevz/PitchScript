@@ -17,9 +17,7 @@ export class PitchScriptParser {
     );
 
     this.commandClasses = new Set(
-      registry.commandClasses.map((commandClass) =>
-        commandClass.toLowerCase()
-      )
+      registry.commandClasses.map((name) => name.toLowerCase())
     );
 
     this.models = new Map(
@@ -41,7 +39,7 @@ export class PitchScriptParser {
       extraData: []
     };
 
-    // Match the original parser's type-recognition precedence.
+    // Preserve DexScript's type-recognition precedence.
     if (this.globalMethods.has(lower)) {
       value.type = ValueType.METHOD;
       return value;
@@ -63,15 +61,6 @@ export class PitchScriptParser {
       return value;
     }
 
-    if (lower === "true" || lower === "false") {
-      value.type = ValueType.BOOLEAN;
-      value.value = lower === "true";
-
-      return value;
-    }
-
-    // The original recognizes dates only when its date parser
-    // accepts the value and the input contains at least two hyphens.
     const hyphenCount = [...lower].filter(
       (character) => character === "-"
     ).length;
@@ -82,7 +71,13 @@ export class PitchScriptParser {
       if (!Number.isNaN(parsedDate.getTime())) {
         value.type = ValueType.DATETIME;
         value.value = parsedDate;
+        return value;
       }
+    }
+
+    if (lower === "true" || lower === "false") {
+      value.type = ValueType.BOOLEAN;
+      value.value = lower === "true";
     }
 
     return value;
