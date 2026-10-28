@@ -10,8 +10,7 @@ import type {
   ModelFieldDefinition,
 } from "./model-utils.js";
 
-import { autocorrect, formatValue as _unused } from "./utils.js";
-import { imagePath, isImage } from "./utils.js";
+import { autocorrect, imagePath, isImage } from "./utils.js";
 
 import type {
   PitchScriptValue,
@@ -39,20 +38,10 @@ interface PrismaDelegate {
 }
 
 export interface FCDexHostOptions {
-  /**
-   * Explicit defaults for required fields that the original
-   * ORM supplied automatically but Prisma requires explicitly.
-   *
-   * Keys can use DSL names or native Prisma property names.
-   */
   readonly createDefaults?: Partial<
     Record<"Club" | "Special", Readonly<Record<string, unknown>>>
   >;
 
-  /**
-   * Integrates the host application's attachment storage.
-   * Returns the path relative to that storage directory.
-   */
   readonly saveAttachment?: (
     attachment: unknown,
   ) => Promise<string>;
@@ -97,7 +86,9 @@ function outputValue(value: unknown): string {
   return String(value);
 }
 
-export class FCDexHost implements PitchScriptHost, PitchScriptFilterHost {
+export class FCDexHost
+  implements PitchScriptHost, PitchScriptFilterHost
+{
   private readonly prisma: Record<string, unknown>;
 
   private readonly recordModels = new WeakMap<
@@ -259,11 +250,25 @@ export class FCDexHost implements PitchScriptHost, PitchScriptFilterHost {
     identifier: string,
   ): Promise<void> {
     const definition = this.modelDefinition(model);
+
     const explicitDefaults =
-      this.options.createDefaults?.[definition.name as "Club" | "Special"] ?? {};
+      this.options.createDefaults?.[
+        definition.name as "Club" | "Special"
+      ] ?? {};
 
     const ignoredFields = new Set(["id", "short_name"]);
-    const identifierFields = new Set(["country", "catch_names", "name"]);
+    const identifierFields = new Set([
+      "country",
+      "catch_names",
+      "name",
+    ]);
+
+    const modelIdFields = new Set(
+      fcdexModels.map(
+        (registeredModel) =>
+          `${registeredModel.name.toLowerCase()}_id`,
+      ),
+    );
 
     const data: Record<string, unknown> = {};
 
@@ -273,7 +278,7 @@ export class FCDexHost implements PitchScriptHost, PitchScriptFilterHost {
       if (
         field.nullable ||
         ignoredFields.has(dslName) ||
-        ["club_id", "special_id"].includes(dslName)
+        modelIdFields.has(dslName)
       ) {
         continue;
       }
@@ -430,10 +435,8 @@ export class FCDexHost implements PitchScriptHost, PitchScriptFilterHost {
     const definition = this.recordDefinition(record);
 
     return definition.fields.map(
-      (field) => [
-        fieldDSLName(field),
-        record[field.name],
-      ] as const,
+      (field) =>
+        [fieldDSLName(field), record[field.name]] as const,
     );
   }
 
@@ -556,7 +559,10 @@ export class FCDexHost implements PitchScriptHost, PitchScriptFilterHost {
   ): Promise<void> {
     const definition = this.modelDefinition(model);
     const [attribute] = field.split("__");
-    const nativeField = this.nativeField(definition, attribute!);
+    const nativeField = this.nativeField(
+      definition,
+      attribute!,
+    );
 
     return this.delegate(definition)
       .updateMany({
@@ -587,6 +593,7 @@ export class FCDexHost implements PitchScriptHost, PitchScriptFilterHost {
     identifierField: string,
   ): Promise<readonly string[]> {
     const definition = this.modelDefinition(model);
+
     const nativeIdentifier = this.nativeField(
       definition,
       identifierField,
