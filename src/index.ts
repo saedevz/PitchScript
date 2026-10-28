@@ -12,6 +12,14 @@ export {
   removeCodeMarkdown,
 } from "./runner.js";
 
+export {
+  autocorrect,
+  fetchModel,
+  imagePath,
+  isImage,
+  pascalCase,
+} from "./utils.js";
+
 export { ValueType } from "./types.js";
 
 export type {
