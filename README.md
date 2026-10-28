@@ -1,45 +1,72 @@
 # PitchScript
 
-**A TypeScript-native implementation of DexScript for FCDex.**
+A TypeScript implementation of the DexScript DSL for FCDex.
 
-PitchScript is a command-based DSL inspired by [DexScript](https://github.com/Caylies/DexScript), designed to make managing collectible data easier through readable commands.
+PitchScript follows the command syntax and behavior of
+[Caylies/DexScript](https://github.com/Caylies/DexScript), with
+the goal of integrating it into a TypeScript codebase.
 
-## Goals
+## Development status
 
-- Preserve DexScript's familiar command syntax.
-- Provide TypeScript-native integration.
-- Support creating, viewing, updating, and deleting records.
-- Support bulk operations.
-- Save and execute reusable evals.
-- Integrate with FCDex and its custom admin panel.
-- Improve parsing, validation, error messages, and maintainability.
+Early development. The parser foundation is being implemented first.
+The command runtime and FCDex integration are not complete.
 
-## Example
+## Syntax compatibility target
 
-```text
-VIEW > CLUB > Manchester City > RARITY >
-```
-
-Example result:
+### Global commands
 
 ```text
-T5
+CREATE > MODEL > IDENTIFIER
+DELETE > MODEL > IDENTIFIER
+UPDATE > MODEL > IDENTIFIER > ATTRIBUTE > VALUE(?)
+VIEW > MODEL > IDENTIFIER > ATTRIBUTE(?)
+ATTRIBUTES > MODEL > FILTER(?)
 ```
 
-*Syntax and compatibility are subject to implementation.*
+### Filter commands
+
+```text
+FILTER > UPDATE > MODEL > ATTRIBUTE > OLD_VALUE > NEW_VALUE > TORTOISE_OPERATOR(?)
+FILTER > DELETE > MODEL > ATTRIBUTE > VALUE > TORTOISE_OPERATOR(?)
+FILTER > VIEW > MODEL > ATTRIBUTE > VALUE > TORTOISE_OPERATOR(?)
+```
+
+### Saved eval commands
+
+```text
+EVAL > SAVE > NAME
+EVAL > REMOVE > NAME
+EVAL > LIST
+EVAL > RUN > NAME
+```
+
+### File commands
+
+```text
+FILE > READ > FILE_PATH
+FILE > WRITE > FILE_PATH
+FILE > CLEAR > FILE_PATH
+FILE > LISTDIR > FILE_PATH(?)
+FILE > DELETE > FILE_PATH
+```
+
+### Template commands
+
+```text
+TEMPLATE > CREATE > MODEL > ARGUMENT(?)
+```
+
+These are compatibility targets taken from the original DexScript
+source. Listing a command here does not mean it has been implemented
+in PitchScript yet.
 
 ## Technology
 
 - TypeScript
-- Bun / Node.js
-- FCDex integration
-
-## Status
-
-Early development.
+- Node.js
+- pnpm
+- Vitest
 
 ## License
 
 MIT. See [LICENSE](LICENSE).
-
-PitchScript is inspired by DexScript by Cayla. Original code and notices are retained where applicable.
