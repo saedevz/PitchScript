@@ -1,13 +1,18 @@
 import { PitchScriptParser } from "./parser.js";
+import { removeCodeMarkdown } from "./utils.js";
+
 import type {
   ParsedScript,
-  PitchScriptValue,
 } from "./types.js";
-import type { PitchScriptCommandContext } from "./host.js";
+
+import type {
+  PitchScriptCommandContext,
+} from "./host.js";
 
 export interface PitchScriptRunnerContext
   extends PitchScriptCommandContext {
   attachments: unknown[];
+
   addReaction(emoji: string): Promise<void>;
 }
 
@@ -23,25 +28,9 @@ export interface PitchScriptRunOptions {
   debug?: boolean;
 }
 
-const START_CODE_BLOCK_RE = /^((```sql?)(?=\s)|(```))/;
-
 /**
- * Mirrors Utils.remove_code_markdown from DexScript.
- */
-export function removeCodeMarkdown(content: string): string {
-  if (content.startsWith("```") && content.endsWith("```")) {
-    return content.replace(START_CODE_BLOCK_RE, "").slice(0, -3);
-  }
-
-  return content.replace(/^[` \n]+|[` \n]+$/g, "");
-}
-
-/**
- * Executes a PitchScript script and reports its result through
- * the supplied command context.
- *
- * The caller is responsible for enforcing Discord owner-only
- * access, matching the original @commands.is_owner() restriction.
+ * Executes parsed PitchScript through the configured executor.
+ * Discord permission checks belong in the Discord integration.
  */
 export async function runPitchScript<
   Context extends PitchScriptRunnerContext,
@@ -69,17 +58,15 @@ export async function runPitchScript<
 
     await context.addReaction("✅");
   } catch (error: unknown) {
-    let message: string;
-
-    if (error instanceof Error) {
-      message =
-        options.debug === true
+    const message =
+      error instanceof Error
+        ? options.debug
           ? error.stack ?? error.message
-          : error.message;
-    } else {
-      message = String(error);
-    }
+          : error.message
+        : String(error);
 
     await context.send(`\`\`\`ERROR: ${message}\`\`\``);
   }
 }
+
+export { removeCodeMarkdown };
