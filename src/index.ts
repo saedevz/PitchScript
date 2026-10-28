@@ -1,7 +1,10 @@
 import { parsePitchScript } from "./parser.js";
 import { validateCommand } from "./validate.js";
+import { executeCommand } from "./runtime.js";
+import type { PitchScriptAdapter } from "./adapter.js";
 
 export interface PitchScriptOptions {
+  readonly adapter: PitchScriptAdapter;
   readonly allowMutations?: boolean;
 }
 
@@ -16,7 +19,7 @@ export interface PitchScriptEngine {
 }
 
 export function createPitchScript(
-  options: PitchScriptOptions = {},
+  options: PitchScriptOptions,
 ): PitchScriptEngine {
   return {
     async execute(source): Promise<PitchScriptResult> {
@@ -35,10 +38,12 @@ export function createPitchScript(
           throw new Error("Mutations are disabled.");
         }
 
-        return {
-          success: false,
-          error: "Command parsing succeeded, but execution is not implemented yet.",
-        };
+        const output = await executeCommand(
+          command,
+          options.adapter,
+        );
+
+        return { success: true, output };
       } catch (error) {
         return {
           success: false,
@@ -54,4 +59,12 @@ export function createPitchScript(
 
 export { parsePitchScript } from "./parser.js";
 export { validateCommand } from "./validate.js";
-export type { PitchScriptCommand, PitchScriptOperation } from "./parser.js";
+export { executeCommand } from "./runtime.js";
+export { EvalRegistry } from "./evals.js";
+
+export type {
+  PitchScriptCommand,
+  PitchScriptOperation,
+} from "./parser.js";
+
+export type { PitchScriptAdapter, ClubRecord } from "./adapter.js";
