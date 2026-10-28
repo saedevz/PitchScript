@@ -10,7 +10,9 @@ export async function executeCommand(
       const [name, property] = command.arguments;
 
       if (!name || !property) {
-        throw new Error("VIEW requires a club name and property.");
+        throw new Error(
+          "VIEW requires a club name and property.",
+        );
       }
 
       const club = await adapter.getClub(name);
@@ -22,13 +24,17 @@ export async function executeCommand(
       const key = property.toLowerCase();
 
       if (!(key in club)) {
-        throw new Error(`Unknown club property "${property}".`);
+        throw new Error(
+          `Unknown club property "${property}".`,
+        );
       }
 
       const value: unknown = club[key];
 
       if (value === undefined || value === null) {
-        throw new Error(`Property "${property}" has no value.`);
+        throw new Error(
+          `Property "${property}" has no value.`,
+        );
       }
 
       return String(value);
@@ -36,16 +42,62 @@ export async function executeCommand(
 
     case "LIST": {
       const clubs = await adapter.listClubs();
-      return clubs.map((club) => club.name).join("\n");
+
+      return clubs
+        .map((club) => club.name)
+        .join("\n");
     }
 
-    case "UPDATE":
-      throw new Error("UPDATE execution is not implemented yet.");
+    case "UPDATE": {
+      const [name, property, ...valueParts] =
+        command.arguments;
 
-    case "DELETE":
-      throw new Error("DELETE execution is not implemented yet.");
+      if (!name || !property || valueParts.length === 0) {
+        throw new Error(
+          "UPDATE requires a club name, property, and value.",
+        );
+      }
+
+      const value = valueParts.join(" ");
+
+      const updatedClub = await adapter.updateClub(
+        name,
+        property,
+        value,
+      );
+
+      if (!updatedClub) {
+        throw new Error(
+          `Club "${name}" was not found.`,
+        );
+      }
+
+      return `Updated ${updatedClub.name}: ${property} = ${value}`;
+    }
+
+    case "DELETE": {
+      const [name] = command.arguments;
+
+      if (!name) {
+        throw new Error(
+          "DELETE requires a club name.",
+        );
+      }
+
+      const deleted = await adapter.deleteClub(name);
+
+      if (!deleted) {
+        throw new Error(
+          `Club "${name}" was not found.`,
+        );
+      }
+
+      return `Deleted club "${name}".`;
+    }
 
     case "CREATE":
-      throw new Error("CREATE execution is not implemented yet.");
+      throw new Error(
+        "CREATE execution is not implemented yet.",
+      );
   }
 }
