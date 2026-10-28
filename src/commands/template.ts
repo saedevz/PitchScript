@@ -29,14 +29,16 @@ export const createTemplateCommands:
 
         const templateCommands = [
           `CREATE > CLUB > ${identifier}`,
-          `UPDATE > CLUB > ${identifier} > REGIME > ...`,
           `UPDATE > CLUB > ${identifier} > HEALTH > ...`,
           `UPDATE > CLUB > ${identifier} > ATTACK > ...`,
           `UPDATE > CLUB > ${identifier} > RARITY > ...`,
           `UPDATE > CLUB > ${identifier} > EMOJI_ID > ...`,
+          `UPDATE > CLUB > ${identifier} > WILD_CARD > ...`,
+          `UPDATE > CLUB > ${identifier} > COLLECTION_CARD > ...`,
           `UPDATE > CLUB > ${identifier} > CREDITS > ...`,
           `UPDATE > CLUB > ${identifier} > CAPACITY_NAME > ...`,
           `UPDATE > CLUB > ${identifier} > CAPACITY_DESCRIPTION > ...`,
+          `UPDATE > CLUB > ${identifier} > REGIME_ID > ...`,
         ];
 
         await ctx.send(
