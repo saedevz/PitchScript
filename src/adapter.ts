@@ -6,10 +6,20 @@ export interface ClubRecord {
   readonly [key: string]: unknown;
 }
 
+export interface CreateClubInput {
+  readonly name: string;
+  readonly rarity: string;
+  readonly country?: string;
+}
+
 export interface PitchScriptAdapter {
   getClub(name: string): Promise<ClubRecord | null>;
 
   listClubs(): Promise<readonly ClubRecord[]>;
+
+  createClub(
+    input: CreateClubInput,
+  ): Promise<ClubRecord>;
 
   updateClub(
     name: string,
