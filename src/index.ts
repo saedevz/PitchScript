@@ -28,6 +28,11 @@ export {
   getModel,
 } from "./model-utils.js";
 
+export {
+  createFCDexParserRegistry,
+  fcdexModels,
+} from "./fcdex-models.js";
+
 export { ValueType } from "./types.js";
 
 export type {
@@ -66,3 +71,7 @@ export type {
   ModelUtilityGateway,
   RuntimeModelDefinition,
 } from "./model-utils.js";
+
+export type {
+  FCDexModelReference,
+} from "./fcdex-models.js";
