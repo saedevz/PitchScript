@@ -33,6 +33,11 @@ export {
   fcdexModels,
 } from "./fcdex-models.js";
 
+export {
+  FCDexHost,
+  createFCDexHost,
+} from "./fcdex-host.js";
+
 export { ValueType } from "./types.js";
 
 export type {
@@ -75,3 +80,7 @@ export type {
 export type {
   FCDexModelReference,
 } from "./fcdex-models.js";
+
+export type {
+  FCDexHostOptions,
+} from "./fcdex-host.js";
