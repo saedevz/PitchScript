@@ -1,7 +1,13 @@
 export { PitchScriptParser } from "./parser.js";
 export { PitchScriptDispatcher } from "./dispatcher.js";
+
 export { createGlobalCommands } from "./commands/global.js";
 export { createFilterCommands } from "./commands/filter.js";
+
+export {
+  runPitchScript,
+  removeCodeMarkdown,
+} from "./runner.js";
 
 export { ValueType } from "./types.js";
 
@@ -29,3 +35,9 @@ export type {
 export type {
   PitchScriptFilterHost,
 } from "./commands/filter.js";
+
+export type {
+  PitchScriptRunnerContext,
+  PitchScriptExecutor,
+  PitchScriptRunOptions,
+} from "./runner.js";
