@@ -20,6 +20,14 @@ export {
   pascalCase,
 } from "./utils.js";
 
+export {
+  createModel,
+  fetchFields,
+  findRuntimeModel,
+  getField,
+  getModel,
+} from "./model-utils.js";
+
 export { ValueType } from "./types.js";
 
 export type {
@@ -52,3 +60,9 @@ export type {
   PitchScriptExecutor,
   PitchScriptRunOptions,
 } from "./runner.js";
+
+export type {
+  ModelFieldDefinition,
+  ModelUtilityGateway,
+  RuntimeModelDefinition,
+} from "./model-utils.js";
