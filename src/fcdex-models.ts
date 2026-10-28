@@ -41,7 +41,7 @@ export const fcdexModels: readonly RuntimeModelDefinition<FCDexModelReference>[]
       { name: "createdAt", dslName: "created_at", typeName: "DatetimeField", nullable: true },
       { name: "translations", typeName: "TextField", nullable: true },
       { name: "economyId", dslName: "economy_id", typeName: "BigIntField", nullable: true },
-      { name: "regimeId", dslName: "regime_id", typeName: "BigIntField", nullable: false },
+      { name: "regimeId", dslName: "regime_id", typeName: "BigIntField", nullable: true },
     ],
   },
   {
