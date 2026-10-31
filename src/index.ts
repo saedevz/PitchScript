@@ -14,8 +14,18 @@ export {
 
 export {
   registerPitchScriptDiscord,
+  parseMentionCommand,
   extractPitchScriptCommand,
 } from "./discord.js";
+
+export {
+  applySetting,
+  createDefaultSettings,
+} from "./settings.js";
+
+export {
+  checkPitchScriptVersion,
+} from "./version.js";
 
 export {
   autocorrect,
@@ -115,4 +125,14 @@ export type {
 
 export type {
   PitchScriptDiscordOptions,
+  MentionCommand,
 } from "./discord.js";
+
+export type {
+  PitchScriptSettings,
+  SettingResult,
+} from "./settings.js";
+
+export type {
+  VersionCheckOptions,
+} from "./version.js";
