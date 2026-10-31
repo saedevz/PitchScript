@@ -17,8 +17,13 @@ export {
   fetchModel,
   imagePath,
   isImage,
+  isDate,
   pascalCase,
+  saveAttachment,
+  MEDIA_PATH,
 } from "./utils.js";
+
+export { messageList } from "./message-list.js";
 
 export {
   createModel,
@@ -84,3 +89,12 @@ export type {
 export type {
   FCDexHostOptions,
 } from "./fcdex-host.js";
+
+export type {
+  SaveableAttachment,
+} from "./utils.js";
+
+export type {
+  ListMessage,
+  MessageListTransport,
+} from "./message-list.js";
