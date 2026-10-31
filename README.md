@@ -2,16 +2,16 @@
 
 A TypeScript implementation of the DexScript DSL for FCDex.
 
-PitchScript follows the command syntax and behavior of
-[Caylies/DexScript](https://github.com/Caylies/DexScript), with
-the goal of integrating it into a TypeScript codebase.
+PitchScript preserves DexScript's command-oriented syntax while
+providing integration with a TypeScript and Prisma-based codebase.
 
 ## Development status
 
-Early development. The parser foundation is being implemented first.
-The command runtime and FCDex integration are not complete.
+PitchScript is under development. The parser, command handlers,
+and FCDex adapter must pass the build and compatibility tests
+before the package is considered ready for production.
 
-## Syntax compatibility target
+## Commands
 
 ### Global commands
 
@@ -31,7 +31,7 @@ FILTER > DELETE > MODEL > ATTRIBUTE > VALUE > TORTOISE_OPERATOR(?)
 FILTER > VIEW > MODEL > ATTRIBUTE > VALUE > TORTOISE_OPERATOR(?)
 ```
 
-### Saved eval commands
+### Saved evals
 
 ```text
 EVAL > SAVE > NAME
@@ -39,6 +39,9 @@ EVAL > REMOVE > NAME
 EVAL > LIST
 EVAL > RUN > NAME
 ```
+
+Saved evals contain PitchScript source and are executed by the
+PitchScript interpreter.
 
 ### File commands
 
@@ -50,22 +53,39 @@ FILE > LISTDIR > FILE_PATH(?)
 FILE > DELETE > FILE_PATH
 ```
 
-### Template commands
+### Templates
 
 ```text
 TEMPLATE > CREATE > MODEL > ARGUMENT(?)
 ```
 
-These are compatibility targets taken from the original DexScript
-source. Listing a command here does not mean it has been implemented
-in PitchScript yet.
+## TypeScript integration
 
-## Technology
+PitchScript exposes a parser, dispatcher, command handlers,
+and an FCDex adapter through its package entry point.
 
-- TypeScript
-- Node.js
-- pnpm
-- Vitest
+The database adapter must be configured against the target
+application's actual Prisma schema.
+
+## Development
+
+Install dependencies:
+
+```bash
+npm install
+```
+
+Build the package:
+
+```bash
+npm run build
+```
+
+Run tests:
+
+```bash
+npm test
+```
 
 ## License
 
