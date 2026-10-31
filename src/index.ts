@@ -43,6 +43,10 @@ export {
   createFCDexHost,
 } from "./fcdex-host.js";
 
+export {
+  createFCDexPitchScript,
+} from "./fcdex-runtime.js";
+
 export { ValueType } from "./types.js";
 
 export type {
@@ -89,6 +93,11 @@ export type {
 export type {
   FCDexHostOptions,
 } from "./fcdex-host.js";
+
+export type {
+  FCDexPitchScriptOptions,
+  FCDexPitchScript,
+} from "./fcdex-runtime.js";
 
 export type {
   SaveableAttachment,
