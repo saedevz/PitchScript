@@ -13,6 +13,11 @@ export {
 } from "./runner.js";
 
 export {
+  registerPitchScriptDiscord,
+  extractPitchScriptCommand,
+} from "./discord.js";
+
+export {
   autocorrect,
   fetchModel,
   imagePath,
@@ -107,3 +112,7 @@ export type {
   ListMessage,
   MessageListTransport,
 } from "./message-list.js";
+
+export type {
+  PitchScriptDiscordOptions,
+} from "./discord.js";
