@@ -1,13 +1,32 @@
-import { existsSync, statSync } from "node:fs";
-import { join } from "node:path";
+import {
+  existsSync,
+  statSync,
+} from "node:fs";
 
-const STATIC = existsSync("static");
+import {
+  access,
+} from "node:fs/promises";
 
-const MEDIA_PATH = STATIC
+import {
+  basename,
+  join,
+  relative,
+} from "node:path";
+
+const STATIC =
+  existsSync("static") && statSync("static").isDirectory();
+
+export const MEDIA_PATH = STATIC
   ? "./static/uploads"
   : "./admin_panel/media";
 
 const START_CODE_BLOCK_RE = /^((```sql?)(?=\s)|(```))/;
+const FILENAME_RE = /^(.+)(\.\S+)$/;
+
+export interface SaveableAttachment {
+  readonly filename: string;
+  save(path: string): Promise<void>;
+}
 
 function removeMatchingBlocks(
   a: string,
@@ -17,7 +36,7 @@ function removeMatchingBlocks(
     [0, a.length, 0, b.length],
   ];
 
-  const blocks: Array<[number, number, number]> = [];
+  let matching = 0;
 
   while (pending.length > 0) {
     const [aStart, aEnd, bStart, bEnd] = pending.pop()!;
@@ -54,7 +73,7 @@ function removeMatchingBlocks(
       continue;
     }
 
-    blocks.push([bestA, bestB, bestSize]);
+    matching += bestSize;
 
     pending.push([
       bestA + bestSize,
@@ -71,28 +90,20 @@ function removeMatchingBlocks(
     ]);
   }
 
-  // Matching blocks are disjoint; count their matched characters.
-  return blocks.reduce((total, block) => total + block[2], 0);
+  return matching;
 }
 
-/**
- * Computes the similarity ratio used by Python's SequenceMatcher.
- *
- * This supports the close-match behavior in the original Utils.autocorrect.
- */
 function similarityRatio(a: string, b: string): number {
   if (a.length + b.length === 0) {
     return 1;
   }
 
-  const matching = removeMatchingBlocks(a, b);
-
-  return (2 * matching) / (a.length + b.length);
+  return (
+    (2 * removeMatchingBlocks(a, b)) /
+    (a.length + b.length)
+  );
 }
 
-/**
- * Port of Utils.pascal_case().
- */
 export function pascalCase(input: string): string {
   const lower = input.toLowerCase();
 
@@ -100,7 +111,8 @@ export function pascalCase(input: string): string {
     return "";
   }
 
-  const capitalized = lower[0]!.toUpperCase() + lower.slice(1);
+  const capitalized =
+    lower[0]!.toUpperCase() + lower.slice(1);
 
   return capitalized.replace(
     /_[a-z]/g,
@@ -108,12 +120,6 @@ export function pascalCase(input: string): string {
   );
 }
 
-/**
- * Port of Utils.autocorrect().
- *
- * The original suggests close matches but still requires an exact match.
- * It is deliberately not an automatic correction mechanism.
- */
 export function autocorrect(
   input: string,
   candidates: readonly string[],
@@ -126,7 +132,10 @@ export function autocorrect(
       ratio: similarityRatio(input, candidate),
     }))
     .filter(({ ratio }) => ratio >= 0.6)
-    .sort((a, b) => b.ratio - a.ratio || a.index - b.index)
+    .sort(
+      (a, b) =>
+        b.ratio - a.ratio || a.index - b.index,
+    )
     .slice(0, 3);
 
   const best = ranked[0]?.candidate;
@@ -142,22 +151,26 @@ export function autocorrect(
   return best;
 }
 
-/**
- * Port of Utils.remove_code_markdown().
- */
-export function removeCodeMarkdown(content: string): string {
-  if (content.startsWith("```") && content.endsWith("```")) {
-    return content.replace(START_CODE_BLOCK_RE, "").slice(0, -3);
+export function removeCodeMarkdown(
+  content: string,
+): string {
+  if (
+    content.startsWith("```") &&
+    content.endsWith("```")
+  ) {
+    return content
+      .replace(START_CODE_BLOCK_RE, "")
+      .slice(0, -3);
   }
 
   return content.replace(/^[` \n]+|[` \n]+$/g, "");
 }
 
-/**
- * Port of Utils.image_path().
- */
 export function imagePath(path: string): string {
-  let relativePath = path.replaceAll("/static/uploads/", "");
+  let relativePath = path.replace(
+    "/static/uploads/",
+    "",
+  );
 
   if (STATIC && relativePath.startsWith(".")) {
     relativePath = relativePath.slice(1);
@@ -166,9 +179,6 @@ export function imagePath(path: string): string {
   return join(MEDIA_PATH, relativePath);
 }
 
-/**
- * Port of Utils.is_image().
- */
 export function isImage(path: string): boolean {
   try {
     return statSync(imagePath(path)).isFile();
@@ -177,12 +187,67 @@ export function isImage(path: string): boolean {
   }
 }
 
-/**
- * Port of Utils.fetch_model() for an explicitly supplied registry.
- */
+export function isDate(input: string): boolean {
+  if (input.trim() === "") {
+    return false;
+  }
+
+  const date = new Date(input);
+
+  return !Number.isNaN(date.getTime());
+}
+
 export function fetchModel<T>(
   name: string,
   models: ReadonlyMap<string, T>,
 ): T | undefined {
   return models.get(pascalCase(name).toLowerCase());
+}
+
+/**
+ * Port of Utils.save_file().
+ *
+ * The attachment's save() method is supplied by the caller,
+ * allowing Discord-specific attachment objects to stay outside
+ * the PitchScript core.
+ */
+export async function saveAttachment(
+  attachment: SaveableAttachment,
+  mediaDirectory = MEDIA_PATH,
+): Promise<string> {
+  const filename = basename(attachment.filename);
+  const match = FILENAME_RE.exec(filename);
+
+  if (!match) {
+    throw new TypeError(
+      "The file you uploaded lacks an extension.",
+    );
+  }
+
+  const [, filenameStem, extension] = match;
+
+  let path = join(mediaDirectory, filename);
+  let index = 1;
+
+  async function exists(target: string): Promise<boolean> {
+    try {
+      await access(target);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  while (await exists(path)) {
+    path = join(
+      mediaDirectory,
+      `${filenameStem}-${index}${extension}`,
+    );
+
+    index += 1;
+  }
+
+  await attachment.save(path);
+
+  return relative(mediaDirectory, path);
 }
