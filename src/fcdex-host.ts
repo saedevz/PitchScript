@@ -10,7 +10,7 @@ import type {
   ModelFieldDefinition,
 } from "./model-utils.js";
 
-import { autocorrect, imagePath, isImage } from "./utils.js";
+import { autocorrect, imagePath, isImage, saveAttachment as saveUploadedAttachment, type SaveableAttachment } from "./utils.js";
 
 import type {
   PitchScriptValue,
@@ -186,6 +186,62 @@ export class FCDexHost
     return record;
   }
 
+  private coerceValue(
+    model: RuntimeModelDefinition<FCDexModelReference>,
+    attribute: string,
+    value: unknown,
+  ): unknown {
+    if (value === null || value === undefined) return value;
+
+    const field = this.field(model, attribute);
+    switch (field.typeName) {
+      case "BigIntField":
+        return typeof value === "bigint" ? value : BigInt(String(value));
+      case "IntField": {
+        const number = Number(value);
+        if (!Number.isInteger(number)) {
+          throw new TypeError(`'${value}' is not a valid integer for '${attribute}'.`);
+        }
+        return number;
+      }
+      case "FloatField": {
+        const number = Number(value);
+        if (!Number.isFinite(number)) {
+          throw new TypeError(`'${value}' is not a valid number for '${attribute}'.`);
+        }
+        return number;
+      }
+      case "BooleanField":
+        if (typeof value === "boolean") return value;
+        if (typeof value === "string") {
+          const normalized = value.toLowerCase();
+          if (normalized === "true") return true;
+          if (normalized === "false") return false;
+        }
+        return Boolean(value);
+      case "DatetimeField":
+      case "DateTimeField": {
+        const date = value instanceof Date ? value : new Date(String(value));
+        if (Number.isNaN(date.getTime())) {
+          throw new TypeError(`'${value}' is not a valid date for '${attribute}'.`);
+        }
+        return date;
+      }
+      case "JSONField":
+        if (typeof value !== "string") return value;
+        try {
+          return JSON.parse(value) as unknown;
+        } catch {
+          return value;
+        }
+      case "CharField":
+      case "TextField":
+        return String(value);
+      default:
+        return value;
+    }
+  }
+
   private whereClause(
     model: RuntimeModelDefinition<FCDexModelReference>,
     field: string,
@@ -193,9 +249,10 @@ export class FCDexHost
   ): Record<string, unknown> {
     const [attribute, operator] = field.split("__");
     const nativeName = this.nativeField(model, attribute!);
+    const coercedValue = this.coerceValue(model, attribute!, value);
 
     if (!operator) {
-      return { [nativeName]: value };
+      return { [nativeName]: coercedValue };
     }
 
     const normalizedOperator = operator.toLowerCase();
@@ -239,7 +296,7 @@ export class FCDexHost
 
     return {
       [nativeName]: {
-        [prismaOperator]: value,
+        [prismaOperator]: coercedValue,
         ...(caseInsensitive ? { mode: "insensitive" } : {}),
       },
     };
@@ -461,12 +518,13 @@ export class FCDexHost
   ): void {
     const definition = this.recordDefinition(record);
     const nativeName = this.nativeField(definition, attribute);
+    const coercedValue = this.coerceValue(definition, attribute, value);
 
     if (!isRecord(record)) {
       throw new Error("Invalid model record.");
     }
 
-    record[nativeName] = value;
+    record[nativeName] = coercedValue;
   }
 
   async saveRecord(
@@ -524,13 +582,21 @@ export class FCDexHost
   }
 
   async saveAttachment(attachment: unknown): Promise<string> {
-    if (!this.options.saveAttachment) {
-      throw new Error(
-        "Attachment storage is not configured for the FCDex host.",
-      );
+    if (this.options.saveAttachment) {
+      return this.options.saveAttachment(attachment);
     }
 
-    return this.options.saveAttachment(attachment);
+    if (
+      typeof attachment !== "object" ||
+      attachment === null ||
+      !("filename" in attachment) ||
+      typeof attachment.filename !== "string"
+    ) {
+      throw new TypeError("The uploaded attachment is invalid.");
+    }
+
+    const candidate = attachment as SaveableAttachment;
+    return saveUploadedAttachment(candidate);
   }
 
   uploadedImageValue(relativePath: string): string {
@@ -567,7 +633,7 @@ export class FCDexHost
     return this.delegate(definition)
       .updateMany({
         where: this.whereClause(definition, field, oldValue),
-        data: { [nativeField]: newValue },
+        data: { [nativeField]: this.coerceValue(definition, attribute!, newValue) },
       })
       .then(() => undefined);
   }

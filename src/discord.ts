@@ -135,6 +135,7 @@ function createMessageWaiter(
 function createContext(
   client: Client,
   message: Message,
+  engine: FCDexPitchScript,
 ): PitchScriptCommandContext {
   const channel = getSendableChannel(message);
 
@@ -197,7 +198,9 @@ function createContext(
     },
   };
 
-  return {
+  let context: PitchScriptCommandContext;
+
+  context = {
     attachments: [...message.attachments.values()],
 
     async send(content, files) {
@@ -223,10 +226,36 @@ function createContext(
         : null;
     },
 
+    async executeScript(source) {
+      const result = await engine.execute(source, context);
+      if (result !== undefined) {
+        throw new Error(result);
+      }
+    },
+
+    async readAttachment(attachment) {
+      if (
+        typeof attachment !== "object" ||
+        attachment === null ||
+        !("url" in attachment) ||
+        typeof attachment.url !== "string"
+      ) {
+        throw new Error("The uploaded attachment has no downloadable URL.");
+      }
+
+      const response = await fetch(attachment.url);
+      if (!response.ok) {
+        throw new Error(`Could not download attachment (${response.status}).`);
+      }
+      return response.text();
+    },
+
     async addReaction(emoji) {
       await message.react(emoji);
     },
   };
+
+  return context;
 }
 
 export function registerPitchScriptDiscord(
@@ -258,6 +287,8 @@ export function registerPitchScriptDiscord(
     }
 
     try {
+      const channel = getSendableChannel(message);
+
       switch (command.name) {
         case "run": {
           if (!command.arguments.trim()) {
@@ -276,12 +307,12 @@ export function registerPitchScriptDiscord(
           );
 
           if (notice) {
-            await message.channel.send({
+            await channel.send({
               content: `-# ${notice}`,
             });
           }
 
-          const context = createContext(client, message);
+          const context = createContext(client, message, engine);
           const result = await engine.execute(
             command.arguments,
             context,
@@ -374,7 +405,7 @@ export function registerPitchScriptDiscord(
           : String(error);
 
       try {
-        await message.channel.send({
+        await getSendableChannel(message).send({
           content: `\`\`\`ERROR: ${detail}\`\`\``,
         });
       } catch (sendError) {

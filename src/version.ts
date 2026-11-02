@@ -10,6 +10,20 @@ interface GitHubContentResponse {
 }
 
 function extractVersion(content: string): string | undefined {
+  try {
+    const parsed: unknown = JSON.parse(content);
+    if (
+      typeof parsed === "object" &&
+      parsed !== null &&
+      "version" in parsed &&
+      typeof parsed.version === "string"
+    ) {
+      return parsed.version;
+    }
+  } catch {
+    // Keep compatibility with repositories still publishing a pyproject.toml.
+  }
+
   return content.match(
     /^\s*version\s*=\s*["']([^"']+)["']/m,
   )?.[1];
@@ -51,13 +65,18 @@ export async function checkPitchScriptVersion(
 
   const url =
     `https://api.github.com/repos/${owner}/${repository}` +
-    `/contents/pyproject.toml${query}`;
+    `/contents/package.json${query}`;
 
-  const response = await fetch(url, {
-    headers: {
-      Accept: "application/vnd.github+json",
-    },
-  });
+  let response: Response;
+  try {
+    response = await fetch(url, {
+      headers: {
+        Accept: "application/vnd.github+json",
+      },
+    });
+  } catch {
+    return null;
+  }
 
   if (!response.ok) {
     return null;

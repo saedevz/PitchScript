@@ -33,6 +33,7 @@ export {
   imagePath,
   isImage,
   isDate,
+  parseDate,
   pascalCase,
   saveAttachment,
   MEDIA_PATH,
@@ -63,6 +64,7 @@ export {
 } from "./fcdex-runtime.js";
 
 export { ValueType } from "./types.js";
+export { EVAL_PRESETS_DIRECTORY } from "./commands/eval.js";
 
 export type {
   ModelDefinition,

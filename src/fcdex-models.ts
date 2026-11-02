@@ -56,7 +56,7 @@ export const fcdexModels: readonly RuntimeModelDefinition<FCDexModelReference>[]
       { name: "endDate", dslName: "end_date", typeName: "DatetimeField", nullable: true },
       { name: "rarity", typeName: "FloatField", nullable: false },
       { name: "emoji", typeName: "CharField", nullable: true, maxLength: 20 },
-      { name: "background", typeName: "CharField", nullable: true },
+      { name: "background", typeName: "CharField", nullable: true, maxLength: 200 },
       { name: "tradeable", typeName: "BooleanField", nullable: false },
       { name: "hidden", typeName: "BooleanField", nullable: false },
       { name: "credits", typeName: "TextField", nullable: true },

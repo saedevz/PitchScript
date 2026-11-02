@@ -72,6 +72,13 @@ export function createFCDexPitchScript(
           }
         : {}),
 
+      ...(context.readAttachment
+        ? {
+            readAttachment: (attachment: unknown) =>
+              context.readAttachment!(attachment),
+          }
+        : {}),
+
       executeScript: async (savedSource: string) => {
         const result = await executeSource(
           savedSource,
