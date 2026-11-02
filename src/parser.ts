@@ -1,3 +1,4 @@
+import { parseDate } from "./utils.js";
 import {
   ValueType,
   type ModelDefinition,
@@ -66,9 +67,9 @@ export class PitchScriptParser {
     ).length;
 
     if (hyphenCount >= 2) {
-      const parsedDate = new Date(line);
+      const parsedDate = parseDate(line);
 
-      if (!Number.isNaN(parsedDate.getTime())) {
+      if (parsedDate) {
         value.type = ValueType.DATETIME;
         value.value = parsedDate;
         return value;

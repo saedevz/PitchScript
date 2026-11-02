@@ -1,171 +1,146 @@
-import {
-  access,
-  mkdir,
-  readFile,
-  readdir,
-  unlink,
-  writeFile,
-} from "node:fs/promises";
-import { resolve } from "node:path";
-
+import { access, mkdir, readdir, readFile, rm, writeFile } from "node:fs/promises";
+import { join } from "node:path";
+import type { PitchScriptValue } from "../types.js";
+import type { PitchScriptCommandContext } from "../host.js";
 import type {
   PitchScriptCommandFactory,
+  PitchScriptSharedState,
 } from "../dispatcher.js";
-import type {
-  PitchScriptCommandContext,
-} from "../host.js";
-import { removeCodeMarkdown } from "../runner.js";
+import { removeCodeMarkdown } from "../utils.js";
 
-const EVAL_DIRECTORY = resolve(
-  process.cwd(),
-  "eval_presets",
-);
+export const EVAL_PRESETS_DIRECTORY = "eval_presets";
+const NAME_LIMIT = 100;
 
-const EVAL_TIMEOUT_MS = 20_000;
-const EVAL_NAME_LIMIT = 100;
+function presetName(token: PitchScriptValue | undefined, method: string): string {
+  if (!token) {
+    throw new TypeError(`Argument missing when calling '${method}'.`);
+  }
+
+  const name = String(token.value ?? token.name);
+  if (
+    name.length === 0 ||
+    name.length > NAME_LIMIT ||
+    name === "." ||
+    name === ".." ||
+    !/^[\p{L}\p{N}_ -]+$/u.test(name)
+  ) {
+    throw new Error(`'${name}' is not a valid eval preset name.`);
+  }
+  return name;
+}
+
+function presetPath(name: string): string {
+  return join(EVAL_PRESETS_DIRECTORY, `${name}.pitchscript`);
+}
 
 async function fileExists(path: string): Promise<boolean> {
   try {
     await access(path);
     return true;
-  } catch {
-    return false;
+  } catch (error) {
+    if (
+      error instanceof Error &&
+      "code" in error &&
+      error.code === "ENOENT"
+    ) {
+      return false;
+    }
+    throw error;
   }
 }
 
-export const createEvalCommands:
-  PitchScriptCommandFactory<PitchScriptCommandContext> =
-  () => ({
-    loaded: async () => {
-      await mkdir(EVAL_DIRECTORY, { recursive: true });
+export const createEvalCommands: PitchScriptCommandFactory<PitchScriptCommandContext> =
+  (_shared: PitchScriptSharedState) => ({
+    async loaded() {
+      await mkdir(EVAL_PRESETS_DIRECTORY, { recursive: true });
     },
 
     methods: {
-      save: async (ctx, name) => {
-        if (!name) {
-          throw new Error(
-            "Argument missing when calling 'save'.",
-          );
-        }
-
-        if (name.name.length > EVAL_NAME_LIMIT) {
-          throw new Error(
-            `\`${name.name}\` exceeds the ${EVAL_NAME_LIMIT}-character limit ` +
-              `(${name.name.length} > ${EVAL_NAME_LIMIT})`,
-          );
-        }
-
-        const path = resolve(
-          EVAL_DIRECTORY,
-          `${name.name}.pitchscript`,
-        );
+      async save(
+        context: PitchScriptCommandContext,
+        nameToken?: PitchScriptValue,
+      ) {
+        const name = presetName(nameToken, "save");
+        const path = presetPath(name);
 
         if (await fileExists(path)) {
-          throw new Error(`\`${name.name}\` already exists.`);
+          throw new Error(`\`${name}\` already exists.`);
         }
 
-        if (!ctx.waitForMessage) {
-          throw new Error(
-            "The host must implement waitForMessage to save eval presets.",
-          );
+        await context.send("Please send the eval command below...");
+
+        if (!context.waitForMessage) {
+          throw new Error("Message collection is not configured for this context.");
         }
 
-        await ctx.send(
-          "Please send the eval command below...",
-        );
-
-        const message = await ctx.waitForMessage(
-          EVAL_TIMEOUT_MS,
-        );
-
-        if (message === null) {
-          await ctx.send(
-            "Eval preset saving has timed out.",
-          );
+        const message = await context.waitForMessage(20_000);
+        if (!message) {
+          await context.send("Eval preset saving has timed out.");
           return;
         }
 
-        await writeFile(
-          path,
-          removeCodeMarkdown(message.content),
-          "utf8",
-        );
-
-        await ctx.send(
-          `\`${name.name}\` eval preset has been saved!`,
-        );
+        await writeFile(path, removeCodeMarkdown(message.content), "utf8");
+        await context.send(`\`${name}\` eval preset has been saved!`);
       },
 
-      remove: async (ctx, name) => {
-        if (!name) {
-          throw new Error(
-            "Argument missing when calling 'remove'.",
-          );
+      async remove(
+        context: PitchScriptCommandContext,
+        nameToken?: PitchScriptValue,
+      ) {
+        const name = presetName(nameToken, "remove");
+        const path = presetPath(name);
+
+        try {
+          await rm(path);
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            "code" in error &&
+            error.code === "ENOENT"
+          ) {
+            throw new Error(`\`${name}\` does not exists`);
+          }
+          throw error;
         }
 
-        const path = resolve(
-          EVAL_DIRECTORY,
-          `${name.name}.pitchscript`,
-        );
-
-        if (!(await fileExists(path))) {
-          throw new Error(
-            `\`${name.name}\` does not exist`,
-          );
-        }
-
-        await unlink(path);
-
-        await ctx.send(
-          `Removed \`${name.name}\` preset.`,
-        );
+        await context.send(`Removed \`${name}\` preset.`);
       },
 
-      list: async (ctx) => {
-        const files = await readdir(EVAL_DIRECTORY);
-
-        const presets = files
-          .filter((file) => file.endsWith(".pitchscript"))
-          .map((file) => file.slice(0, -".pitchscript".length));
-
+      async list(context: PitchScriptCommandContext) {
+        await mkdir(EVAL_PRESETS_DIRECTORY, { recursive: true });
+        const presets = await readdir(EVAL_PRESETS_DIRECTORY);
         if (presets.length === 0) {
-          await ctx.send(
-            "You have no eval presets saved.",
-          );
+          await context.send("You have no eval presets saved.");
           return;
         }
-
-        await ctx.sendList(presets);
+        await context.sendList(presets);
       },
 
-      run: async (ctx, name) => {
-        if (!name) {
-          throw new Error(
-            "Argument missing when calling 'run'.",
-          );
+      async run(
+        context: PitchScriptCommandContext,
+        nameToken?: PitchScriptValue,
+      ) {
+        const name = presetName(nameToken, "run");
+        let source: string;
+        try {
+          source = await readFile(presetPath(name), "utf8");
+        } catch (error) {
+          if (
+            error instanceof Error &&
+            "code" in error &&
+            error.code === "ENOENT"
+          ) {
+            throw new Error(`\`${name}\` does not exists`);
+          }
+          throw error;
         }
 
-        const path = resolve(
-          EVAL_DIRECTORY,
-          `${name.name}.pitchscript`,
-        );
-
-        if (!(await fileExists(path))) {
-          throw new Error(
-            `\`${name.name}\` does not exist`,
-          );
+        if (!context.executeScript) {
+          throw new Error("PitchScript execution is not configured for this context.");
         }
 
-        if (!ctx.executeScript) {
-          throw new Error(
-            "The host must implement executeScript to run eval presets.",
-          );
-        }
-
-        const source = await readFile(path, "utf8");
-
-        await ctx.executeScript(source);
-        await ctx.addReaction?.("✅");
+        await context.executeScript(source);
+        await context.addReaction?.("✅");
       },
     },
   });

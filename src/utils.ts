@@ -5,6 +5,8 @@ import {
 
 import {
   access,
+  mkdir,
+  writeFile,
 } from "node:fs/promises";
 
 import {
@@ -25,7 +27,8 @@ const FILENAME_RE = /^(.+)(\.\S+)$/;
 
 export interface SaveableAttachment {
   readonly filename: string;
-  save(path: string): Promise<void>;
+  readonly url?: string;
+  save?(path: string): Promise<void>;
 }
 
 function removeMatchingBlocks(
@@ -54,10 +57,12 @@ function removeMatchingBlocks(
           continue;
         }
 
-        current[j - bStart + 1] =
-          previous[j - bStart] + 1;
+        const currentIndex = j - bStart + 1;
+        const previousIndex = j - bStart;
+        current[currentIndex] =
+          (previous[previousIndex] ?? 0) + 1;
 
-        const size = current[j - bStart + 1];
+        const size = current[currentIndex] ?? 0;
 
         if (size > bestSize) {
           bestSize = size;
@@ -187,14 +192,33 @@ export function isImage(path: string): boolean {
   }
 }
 
-export function isDate(input: string): boolean {
-  if (input.trim() === "") {
-    return false;
+export function parseDate(input: string): Date | undefined {
+  const value = input.trim();
+  if (value === "") return undefined;
+
+  const nativeDate = new Date(value);
+  if (!Number.isNaN(nativeDate.getTime())) return nativeDate;
+
+  // dateutil (used by the Python source) accepts day-first dates too.
+  const dayFirst = /^(\d{1,2})-(\d{1,2})-(\d{4})$/.exec(value);
+  if (!dayFirst) return undefined;
+
+  const day = Number(dayFirst[1]);
+  const month = Number(dayFirst[2]);
+  const year = Number(dayFirst[3]);
+  const date = new Date(year, month - 1, day);
+  if (
+    date.getFullYear() !== year ||
+    date.getMonth() !== month - 1 ||
+    date.getDate() !== day
+  ) {
+    return undefined;
   }
+  return date;
+}
 
-  const date = new Date(input);
-
-  return !Number.isNaN(date.getTime());
+export function isDate(input: string): boolean {
+  return parseDate(input) !== undefined;
 }
 
 export function fetchModel<T>(
@@ -224,7 +248,10 @@ export async function saveAttachment(
     );
   }
 
-  const [, filenameStem, extension] = match;
+  const filenameStem = match[1]!;
+  const extension = match[2]!;
+
+  await mkdir(mediaDirectory, { recursive: true });
 
   let path = join(mediaDirectory, filename);
   let index = 1;
@@ -247,7 +274,17 @@ export async function saveAttachment(
     index += 1;
   }
 
-  await attachment.save(path);
+  if (typeof attachment.save === "function") {
+    await attachment.save(path);
+  } else if (typeof attachment.url === "string") {
+    const response = await fetch(attachment.url);
+    if (!response.ok) {
+      throw new Error(`Could not download attachment (${response.status}).`);
+    }
+    await writeFile(path, new Uint8Array(await response.arrayBuffer()));
+  } else {
+    throw new TypeError("The attachment cannot be saved by this host.");
+  }
 
   return relative(mediaDirectory, path);
 }

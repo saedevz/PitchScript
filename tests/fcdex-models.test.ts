@@ -77,7 +77,7 @@ describe("FCDex model registry", () => {
     expect(registeredNames).not.toContain("Economy");
   });
 
-  it("includes the required regimeId field", () => {
+  it("matches the optional regimeId in schema.prisma", () => {
     const club = fcdexModels.find(
       (model) => model.name === "Club",
     );
@@ -89,7 +89,7 @@ describe("FCDex model registry", () => {
     expect(field).toMatchObject({
       name: "regimeId",
       typeName: "BigIntField",
-      nullable: false,
+      nullable: true,
     });
   });
 });

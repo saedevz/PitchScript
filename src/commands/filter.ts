@@ -1,26 +1,25 @@
 import { ValueType, type PitchScriptValue } from "../types.js";
+import type { PitchScriptCommandContext } from "../host.js";
 import type {
   PitchScriptCommandFactory,
-  PitchScriptCommandInstance,
+  PitchScriptSharedState,
 } from "../dispatcher.js";
-import type { PitchScriptCommandContext } from "../host.js";
-import type { PitchScriptHost } from "../host.js";
 
-export interface PitchScriptFilterHost
-  extends Pick<PitchScriptHost, "hasAttribute" | "getModel"> {
+export interface PitchScriptFilterHost {
+  hasAttribute(model: PitchScriptValue, attribute: string): boolean;
+  getModel(model: PitchScriptValue, identifier: string): Promise<unknown>;
+  getPrimaryKey(record: unknown): unknown;
   filterUpdate(
     model: PitchScriptValue,
     field: string,
     oldValue: unknown,
     newValue: unknown,
   ): Promise<void>;
-
   filterDelete(
     model: PitchScriptValue,
     field: string,
     value: unknown,
   ): Promise<void>;
-
   filterValues(
     model: PitchScriptValue,
     field: string,
@@ -29,174 +28,134 @@ export interface PitchScriptFilterHost
   ): Promise<readonly string[]>;
 }
 
+function required<T>(value: T | undefined, method: string): T {
+  if (value === undefined) {
+    throw new TypeError(`Argument missing when calling '${method}'.`);
+  }
+  return value;
+}
+
+function rawValue(value: PitchScriptValue): unknown {
+  return value.value;
+}
+
+function asText(value: PitchScriptValue): string {
+  return String(value.value ?? value.name);
+}
+
+function modelIdentifierField(model: PitchScriptValue): string {
+  const field = model.extraData[0];
+  if (typeof field !== "string") {
+    throw new Error(`Missing identifier field for ${model.name}.`);
+  }
+  return field;
+}
+
+function filterField(
+  host: PitchScriptFilterHost,
+  model: PitchScriptValue,
+  attribute: PitchScriptValue,
+  operator?: PitchScriptValue,
+): string {
+  const name = attribute.name.toLowerCase();
+  if (!host.hasAttribute(model, name)) {
+    throw new Error(`'${name}' is not a valid ${model.name} attribute`);
+  }
+  return operator
+    ? `${name}__${operator.name.toLowerCase()}`
+    : name;
+}
+
+async function filterValue(
+  host: PitchScriptFilterHost,
+  attribute: PitchScriptValue,
+  value: PitchScriptValue,
+): Promise<unknown> {
+  if (attribute.type === ValueType.MODEL) {
+    const related = await host.getModel(attribute, asText(value));
+    return host.getPrimaryKey(related);
+  }
+  return rawValue(value);
+}
+
 export function createFilterCommands(
   host: PitchScriptFilterHost,
 ): PitchScriptCommandFactory<PitchScriptCommandContext> {
-  return (shared): PitchScriptCommandInstance<PitchScriptCommandContext> => {
-    void shared;
-
-    function validateAttribute(
-      model: PitchScriptValue,
-      attribute: PitchScriptValue,
-    ): string {
-      const attributeName = attribute.name.toLowerCase();
-
-      if (
-        model.value !== null &&
-        !host.hasAttribute(model, attributeName)
+  return (_shared: PitchScriptSharedState) => ({
+    methods: {
+      async update(
+        context: PitchScriptCommandContext,
+        modelToken?: PitchScriptValue,
+        attributeToken?: PitchScriptValue,
+        oldValueToken?: PitchScriptValue,
+        newValueToken?: PitchScriptValue,
+        operatorToken?: PitchScriptValue,
       ) {
-        throw new Error(
-          `'${attributeName}' is not a valid ${model.name} attribute\n` +
-            `Run \`ATTRIBUTES > ${model.name}\` to see a list of ` +
-            "all attributes for that model",
+        const model = required(modelToken, "update");
+        const attribute = required(attributeToken, "update");
+        const oldValue = required(oldValueToken, "update");
+        const newValue = required(newValueToken, "update");
+        const field = filterField(host, model, attribute, operatorToken);
+        await host.filterUpdate(
+          model,
+          field,
+          await filterValue(host, attribute, oldValue),
+          await filterValue(host, attribute, newValue),
         );
-      }
-
-      return attributeName;
-    }
-
-    async function resolveValue(
-      attribute: PitchScriptValue,
-      value: PitchScriptValue,
-    ): Promise<unknown> {
-      if (attribute.type === ValueType.MODEL) {
-        return host.getModel(attribute, String(value.value));
-      }
-
-      return value.value;
-    }
-
-    function queryField(
-      attributeName: string,
-      operator?: PitchScriptValue,
-    ): string {
-      if (operator === undefined) {
-        return attributeName;
-      }
-
-      return `${attributeName}__${operator.name.toLowerCase()}`;
-    }
-
-    return {
-      methods: {
-        update: async (ctx, ...args: PitchScriptValue[]) => {
-          const model = args[0];
-          const attribute = args[1];
-          const oldValue = args[2];
-          const newValue = args[3];
-          const operator = args[4];
-
-          if (!model || !attribute || !oldValue || !newValue) {
-            throw new Error(
-              "Argument missing when calling 'update'.",
-            );
-          }
-
-          const attributeName = validateAttribute(model, attribute);
-          const field = queryField(attributeName, operator);
-
-          const resolvedOldValue = await resolveValue(
-            attribute,
-            oldValue,
-          );
-
-          const resolvedNewValue = await resolveValue(
-            attribute,
-            newValue,
-          );
-
-          await host.filterUpdate(
-            model,
-            field,
-            resolvedOldValue,
-            resolvedNewValue,
-          );
-
-          await ctx.send(
-            `Updated all \`${model.name}\` instances from a ` +
-              `\`${attribute.name}\` value of \`${oldValue.name}\` ` +
-              `to \`${newValue.name}\``,
-          );
-        },
-
-        delete: async (ctx, ...args: PitchScriptValue[]) => {
-          const model = args[0];
-          const attribute = args[1];
-          const value = args[2];
-          const operator = args[3];
-
-          if (!model || !attribute || !value) {
-            throw new Error(
-              "Argument missing when calling 'delete'.",
-            );
-          }
-
-          const attributeName = validateAttribute(model, attribute);
-          const field = queryField(attributeName, operator);
-
-          const resolvedValue = await resolveValue(
-            attribute,
-            value,
-          );
-
-          await host.filterDelete(
-            model,
-            field,
-            resolvedValue,
-          );
-
-          await ctx.send(
-            `Deleted all \`${model.name}\` instances with a ` +
-              `\`${attribute.name}\` value of \`${value.name}\``,
-          );
-        },
-
-        view: async (ctx, ...args: PitchScriptValue[]) => {
-          const model = args[0];
-          const attribute = args[1];
-          const value = args[2];
-          const operator = args[3];
-
-          if (!model || !attribute || !value) {
-            throw new Error(
-              "Argument missing when calling 'view'.",
-            );
-          }
-
-          const attributeName = validateAttribute(model, attribute);
-          const field = queryField(attributeName, operator);
-
-          const resolvedValue = await resolveValue(
-            attribute,
-            value,
-          );
-
-          const identifierField = model.extraData[0];
-
-          if (typeof identifierField !== "string") {
-            throw new Error(
-              `Could not resolve the identifier field for ${model.name}.`,
-            );
-          }
-
-          const instances = await host.filterValues(
-            model,
-            field,
-            resolvedValue,
-            identifierField,
-          );
-
-          if (instances.length === 0) {
-            await ctx.send(
-              `No ${model.name}s found with a ` +
-                `\`${attribute.name}\` value of \`${value.name}\``,
-            );
-            return;
-          }
-
-          await ctx.sendList(instances);
-        },
+        await context.send(
+          `Updated all \`${model.name}\` instances from a \`${attribute.name}\` value of ` +
+            `\`${oldValue.name}\` to \`${newValue.name}\``,
+        );
       },
-    };
-  };
+
+      async delete(
+        context: PitchScriptCommandContext,
+        modelToken?: PitchScriptValue,
+        attributeToken?: PitchScriptValue,
+        valueToken?: PitchScriptValue,
+        operatorToken?: PitchScriptValue,
+      ) {
+        const model = required(modelToken, "delete");
+        const attribute = required(attributeToken, "delete");
+        const value = required(valueToken, "delete");
+        const field = filterField(host, model, attribute, operatorToken);
+        await host.filterDelete(
+          model,
+          field,
+          await filterValue(host, attribute, value),
+        );
+        await context.send(
+          `Deleted all \`${model.name}\` instances with a \`${attribute.name}\` value of \`${value.name}\``,
+        );
+      },
+
+      async view(
+        context: PitchScriptCommandContext,
+        modelToken?: PitchScriptValue,
+        attributeToken?: PitchScriptValue,
+        valueToken?: PitchScriptValue,
+        operatorToken?: PitchScriptValue,
+      ) {
+        const model = required(modelToken, "view");
+        const attribute = required(attributeToken, "view");
+        const value = required(valueToken, "view");
+        const field = filterField(host, model, attribute, operatorToken);
+        const values = await host.filterValues(
+          model,
+          field,
+          await filterValue(host, attribute, value),
+          modelIdentifierField(model),
+        );
+
+        if (values.length === 0) {
+          await context.send(
+            `No ${model.name}s found with a \`${attribute.name}\` value of \`${value.name}\``,
+          );
+          return;
+        }
+
+        await context.sendList(values);
+      },
+    },
+  });
 }

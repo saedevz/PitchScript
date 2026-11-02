@@ -1,172 +1,73 @@
-import {
-  readFile,
-  writeFile,
-  readdir,
-  stat,
-  unlink,
-  rm,
-} from "node:fs/promises";
-import { resolve } from "node:path";
-
+import { access, readdir, rm, stat, writeFile } from "node:fs/promises";
+import type { PitchScriptValue } from "../types.js";
+import type { PitchScriptCommandContext } from "../host.js";
 import type {
   PitchScriptCommandFactory,
-  PitchScriptCommandInstance,
+  PitchScriptSharedState,
 } from "../dispatcher.js";
-import type {
-  PitchScriptCommandContext,
-} from "../host.js";
-import type { PitchScriptValue } from "../types.js";
 
-async function readAttachment(
-  attachment: unknown,
-): Promise<Uint8Array> {
-  if (typeof attachment !== "object" || attachment === null) {
-    throw new Error("The attachment is invalid.");
+function filePath(token: PitchScriptValue | undefined, method: string): string {
+  if (!token) {
+    throw new TypeError(`Argument missing when calling '${method}'.`);
   }
-
-  const item = attachment as Record<string, unknown>;
-
-  if (typeof item.url === "string") {
-    const response = await fetch(item.url);
-
-    if (!response.ok) {
-      throw new Error(
-        `Failed to download attachment: HTTP ${response.status}.`,
-      );
-    }
-
-    return new Uint8Array(await response.arrayBuffer());
-  }
-
-  if (typeof item.arrayBuffer === "function") {
-    const data = await (
-      item.arrayBuffer as () => Promise<ArrayBuffer>
-    )();
-
-    return new Uint8Array(data);
-  }
-
-  if (item.data instanceof Uint8Array) {
-    return item.data;
-  }
-
-  if (item.attachment instanceof Uint8Array) {
-    return item.attachment;
-  }
-
-  throw new Error(
-    "The host attachment cannot be read as binary data.",
-  );
+  return String(token.value ?? token.name);
 }
 
-export const createFileCommands:
-  PitchScriptCommandFactory<PitchScriptCommandContext> =
-  () => ({
+async function exists(path: string): Promise<boolean> {
+  try {
+    await access(path);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+export const createFileCommands: PitchScriptCommandFactory<PitchScriptCommandContext> =
+  (_shared: PitchScriptSharedState) => ({
     methods: {
-      read: async (ctx, filePath) => {
-        if (!filePath) {
-          throw new Error(
-            "Argument missing when calling 'read'.",
-          );
-        }
-
-        await ctx.send("", [filePath.name]);
+      async read(context: PitchScriptCommandContext, pathToken?: PitchScriptValue) {
+        const path = filePath(pathToken, "read");
+        await context.send("", [path]);
       },
 
-      write: async (ctx, filePath) => {
-        if (!filePath) {
-          throw new Error(
-            "Argument missing when calling 'write'.",
-          );
-        }
-
-        const attachment = ctx.attachments?.[0];
-
+      async write(context: PitchScriptCommandContext, pathToken?: PitchScriptValue) {
+        const path = filePath(pathToken, "write");
+        const attachment = context.attachments?.[0];
         if (attachment === undefined) {
-          throw new Error(
-            "FILE > WRITE requires an attached file.",
-          );
+          throw new Error("An attachment is required to write a file.");
+        }
+        if (!context.readAttachment) {
+          throw new Error("Attachment reading is not configured for this context.");
         }
 
-        const contents = await readAttachment(attachment);
-
-        await writeFile(
-          filePath.name,
-          Buffer.from(contents).toString("utf8"),
-          "utf8",
-        );
-
-        await ctx.send(
-          `Wrote to \`${filePath.name}\``,
-        );
+        const contents = await context.readAttachment(attachment);
+        await writeFile(path, contents, "utf8");
+        context.attachments?.shift();
+        await context.send(`Wrote to \`${pathToken!.name}\``);
       },
 
-      clear: async (ctx, filePath) => {
-        if (!filePath) {
-          throw new Error(
-            "Argument missing when calling 'clear'.",
-          );
-        }
-
-        const path = filePath.name;
-
-        try {
-          const details = await stat(path);
-
-          if (!details.isFile()) {
-            throw new Error(
-              `'${path}' does not exist`,
-            );
-          }
-        } catch (error) {
-          if (
-            error instanceof Error &&
-            error.message === `'${path}' does not exist`
-          ) {
-            throw error;
-          }
-
+      async clear(context: PitchScriptCommandContext, pathToken?: PitchScriptValue) {
+        const path = filePath(pathToken, "clear");
+        if (!(await exists(path))) {
           throw new Error(`'${path}' does not exist`);
         }
-
         await writeFile(path, "", "utf8");
-
-        await ctx.send(`Cleared \`${path}\``);
+        await context.send(`Cleared \`${pathToken!.name}\``);
       },
 
-      listdir: async (ctx, filePath) => {
-        const path = filePath?.name ?? ".";
+      async listdir(context: PitchScriptCommandContext, pathToken?: PitchScriptValue) {
+        const path = pathToken ? filePath(pathToken, "listdir") : ".";
         const entries = await readdir(path);
-
-        await ctx.sendList(entries);
+        await context.sendList(entries);
       },
 
-      delete: async (ctx, filePath) => {
-        if (!filePath) {
-          throw new Error(
-            "Argument missing when calling 'delete'.",
-          );
-        }
-
-        const path = filePath.name;
+      async delete(context: PitchScriptCommandContext, pathToken?: PitchScriptValue) {
+        const path = filePath(pathToken, "delete");
         const details = await stat(path);
         const isDirectory = details.isDirectory();
-
-        if (isDirectory) {
-          await rm(path, {
-            recursive: true,
-            force: false,
-          });
-        } else {
-          await unlink(path);
-        }
-
-        const fileType = isDirectory
-          ? "directory"
-          : "file";
-
-        await ctx.send(
-          `Deleted \`${path}\` ${fileType}`,
+        await rm(path, { recursive: isDirectory });
+        await context.send(
+          `Deleted \`${pathToken!.name}\` ${isDirectory ? "directory" : "file"}`,
         );
       },
     },

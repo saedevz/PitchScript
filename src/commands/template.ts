@@ -1,49 +1,44 @@
+import type { PitchScriptValue } from "../types.js";
+import type { PitchScriptCommandContext } from "../host.js";
 import type {
   PitchScriptCommandFactory,
+  PitchScriptSharedState,
 } from "../dispatcher.js";
-import type {
-  PitchScriptCommandContext,
-} from "../host.js";
-import type { PitchScriptValue } from "../types.js";
 
-export const createTemplateCommands:
-  PitchScriptCommandFactory<PitchScriptCommandContext> =
-  () => ({
+export const createTemplateCommands: PitchScriptCommandFactory<PitchScriptCommandContext> =
+  (_shared: PitchScriptSharedState) => ({
     methods: {
-      create: async (
-        ctx,
-        model: PitchScriptValue,
-        argument?: PitchScriptValue,
-      ) => {
-        if (!model) {
-          throw new Error(
-            "Argument missing when calling 'create'.",
-          );
+      async create(
+        context: PitchScriptCommandContext,
+        modelToken?: PitchScriptValue,
+        argumentToken?: PitchScriptValue,
+      ) {
+        if (!modelToken) {
+          throw new TypeError("Argument missing when calling 'create'.");
         }
 
-        if (model.name.toLowerCase() !== "club") {
-          return;
+        // FCDex's CLUB DSL model is the BallsDex Ball model used by
+        // the original DexScript template.
+        if (modelToken.name.toLowerCase() !== "club" && modelToken.name.toLowerCase() !== "ball") {
+          throw new Error(`No creation template is defined for '${modelToken.name}'.`);
         }
 
-        const identifier = argument?.name ?? "...";
-
-        const templateCommands = [
-          `CREATE > CLUB > ${identifier}`,
-          `UPDATE > CLUB > ${identifier} > HEALTH > ...`,
-          `UPDATE > CLUB > ${identifier} > ATTACK > ...`,
-          `UPDATE > CLUB > ${identifier} > RARITY > ...`,
-          `UPDATE > CLUB > ${identifier} > EMOJI_ID > ...`,
-          `UPDATE > CLUB > ${identifier} > WILD_CARD > ...`,
-          `UPDATE > CLUB > ${identifier} > COLLECTION_CARD > ...`,
-          `UPDATE > CLUB > ${identifier} > CREDITS > ...`,
-          `UPDATE > CLUB > ${identifier} > CAPACITY_NAME > ...`,
-          `UPDATE > CLUB > ${identifier} > CAPACITY_DESCRIPTION > ...`,
-          `UPDATE > CLUB > ${identifier} > REGIME_ID > ...`,
+        const argument = argumentToken?.name ?? "...";
+        const lines = [
+          `CREATE > CLUB > ${argument}`,
+          `UPDATE > CLUB > ${argument} > HEALTH > ...`,
+          `UPDATE > CLUB > ${argument} > ATTACK > ...`,
+          `UPDATE > CLUB > ${argument} > RARITY > ...`,
+          `UPDATE > CLUB > ${argument} > EMOJI_ID > ...`,
+          `UPDATE > CLUB > ${argument} > WILD_CARD > ...`,
+          `UPDATE > CLUB > ${argument} > COLLECTION_CARD > ...`,
+          `UPDATE > CLUB > ${argument} > CREDITS > ...`,
+          `UPDATE > CLUB > ${argument} > CAPACITY_NAME > ...`,
+          `UPDATE > CLUB > ${argument} > CAPACITY_DESCRIPTION > ...`,
+          `UPDATE > CLUB > ${argument} > CAPACITY_LOGIC > ...`,
         ];
 
-        await ctx.send(
-          `\`\`\`sql\n${templateCommands.join("\n")}\n\`\`\``,
-        );
+        await context.send(`\`\`\`sql\n${lines.join("\n")}\n\`\`\``);
       },
     },
   });

@@ -7,6 +7,15 @@ export interface PitchScriptFieldInfo {
   readonly maxLength?: number;
 }
 
+export interface PitchScriptMessage {
+  readonly content: string;
+}
+
+/**
+ * Host services supplied by the application running PitchScript.
+ * The additional interaction hooks are optional so the core command
+ * handlers can also be used with non-Discord transports.
+ */
 export interface PitchScriptCommandContext {
   send(
     content: string,
@@ -14,6 +23,16 @@ export interface PitchScriptCommandContext {
   ): Promise<void>;
 
   sendList(messages: readonly string[]): Promise<void>;
+
+  attachments?: unknown[];
+
+  waitForMessage?(timeoutMs: number): Promise<PitchScriptMessage | null>;
+
+  executeScript?(source: string): Promise<void>;
+
+  addReaction?(emoji: string): Promise<void>;
+
+  readAttachment?(attachment: unknown): Promise<string>;
 }
 
 export interface PitchScriptHost {

@@ -1,235 +1,202 @@
 import { ValueType, type PitchScriptValue } from "../types.js";
 import type {
-  PitchScriptCommandFactory,
-  PitchScriptCommandInstance,
-} from "../dispatcher.js";
-import type {
   PitchScriptCommandContext,
   PitchScriptHost,
 } from "../host.js";
+import type {
+  PitchScriptCommandFactory,
+  PitchScriptSharedState,
+} from "../dispatcher.js";
+
+function valueOf(token: PitchScriptValue): unknown {
+  return token.value;
+}
+
+function textOf(token: PitchScriptValue): string {
+  return String(token.value ?? token.name);
+}
+
+function missingArgument(name: string): never {
+  throw new TypeError(`Argument missing when calling '${name}'.`);
+}
+
+function ensureModel(model: PitchScriptValue | undefined): PitchScriptValue {
+  if (!model || model.type !== ValueType.MODEL) {
+    throw new TypeError("A model argument is required.");
+  }
+  return model;
+}
 
 export function createGlobalCommands(
   host: PitchScriptHost,
 ): PitchScriptCommandFactory<PitchScriptCommandContext> {
-  return (shared): PitchScriptCommandInstance<PitchScriptCommandContext> => {
-    function attributeError(
-      model: PitchScriptValue,
-      attribute: string,
-    ): void {
-      if (
-        model.value === null ||
-        host.hasAttribute(model, attribute)
+  return (_shared: PitchScriptSharedState) => ({
+    methods: {
+      async create(
+        context: PitchScriptCommandContext,
+        modelToken?: PitchScriptValue,
+        identifier?: PitchScriptValue,
       ) {
-        return;
-      }
+        const model = ensureModel(modelToken);
+        if (!identifier) missingArgument("create");
 
-      throw new Error(
-        `'${attribute}' is not a valid ${model.name} attribute\n` +
-          `Run \`ATTRIBUTES > ${model.name}\` to see a list of ` +
-          `all attributes for that model`,
-      );
-    }
-
-    return {
-      methods: {
-        create: async (ctx, ...args: PitchScriptValue[]) => {
-          const model = args[0]!;
-          const identifier = args[1]!;
-
-          await host.createModel(model, identifier.name);
-
-          await ctx.send(
-            `Created \`${identifier.name}\` ${model.name.toLowerCase()}`,
-          );
-        },
-
-        delete: async (ctx, ...args: PitchScriptValue[]) => {
-          const model = args[0]!;
-          const identifier = args[1]!;
-
-          const record = await host.getModel(
-            model,
-            identifier.name,
-          );
-
-          await host.deleteRecord(record);
-
-          await ctx.send(
-            `Deleted \`${identifier.name}\` ${model.name.toLowerCase()}`,
-          );
-        },
-
-        update: async (ctx, ...args: PitchScriptValue[]) => {
-          const model = args[0]!;
-          const identifier = args[1]!;
-          const attribute = args[2]!;
-          const value = args[3];
-
-          let attributeName = attribute.name.toLowerCase();
-          let newValue: unknown =
-            value === undefined ? null : value.value;
-
-          const record = await host.getModel(
-            model,
-            identifier.name,
-          );
-
-          attributeError(model, attributeName);
-
-          const imageFields = host
-            .getFields(model)
-            .filter(
-              (field) =>
-                field.typeName === "CharField" &&
-                field.maxLength === 200,
-            )
-            .map((field) => field.name);
-
-          if (
-            value === undefined &&
-            shared.attachments.length > 0 &&
-            imageFields.includes(attributeName)
-          ) {
-            const attachment = shared.attachments.shift();
-
-            if (attachment !== undefined) {
-              const savedPath =
-                await host.saveAttachment(attachment);
-
-              newValue = host.uploadedImageValue(savedPath);
-            }
-          }
-
-          if (attribute.type === ValueType.MODEL) {
-            attributeName = `${attribute.name.toLowerCase()}_id`;
-
-            const relatedRecord = await host.getModel(
-              attribute,
-              value!.name,
-            );
-
-            newValue = host.getPrimaryKey(relatedRecord);
-          }
-
-          host.setRecordValue(
-            record,
-            attributeName,
-            newValue,
-          );
-
-          await host.saveRecord(record, [attributeName]);
-
-          const suffix =
-            value === undefined
-              ? ""
-              : ` to \`${value.name}\``;
-
-          await ctx.send(
-            `Updated \`${identifier.name}'s\` ${attribute.name}${suffix}`,
-          );
-        },
-
-        view: async (ctx, ...args: PitchScriptValue[]) => {
-          const model = args[0]!;
-          const identifier = args[1]!;
-          const attribute = args[2];
-
-          const record = await host.getModel(
-            model,
-            identifier.name,
-          );
-
-          if (attribute === undefined) {
-            const lines = ["```"];
-            const files: string[] = [];
-
-            for (const [key, value] of host.getRecordEntries(record)) {
-              if (key.startsWith("_")) {
-                continue;
-              }
-
-              lines.push(
-                `${key}: ${host.formatValue(value)}`,
-              );
-
-              if (
-                typeof value === "string" &&
-                host.isImage(value)
-              ) {
-                files.push(host.imagePath(value));
-              }
-            }
-
-            lines.push("```");
-
-            await ctx.send(lines.join("\n"), files);
-            return;
-          }
-
-          const attributeName = attribute.name.toLowerCase();
-
-          attributeError(model, attributeName);
-
-          let newAttribute = host.getRecordValue(
-            record,
-            attributeName,
-          );
-
-          if (
-            typeof newAttribute === "string" &&
-            host.isImage(newAttribute)
-          ) {
-            await ctx.send(
-              `\`\`\`${newAttribute}\`\`\``,
-              [host.imagePath(newAttribute)],
-            );
-            return;
-          }
-
-          if (attribute.type === ValueType.MODEL) {
-            newAttribute = await host.getRelatedIdentifiers(
-              newAttribute,
-              attribute.extraData[0]!,
-            );
-          }
-
-          await ctx.send(
-            `\`\`\`${host.formatValue(newAttribute)}\`\`\``,
-          );
-        },
-
-        attributes: async (ctx, ...args: PitchScriptValue[]) => {
-          const model = args[0]!;
-          const filter = args[1];
-
-          const fields = host.getFields(model)
-            .filter((field) => {
-              if (field.typeName === "BackwardFKRelation") {
-                return false;
-              }
-
-              if (filter === undefined) {
-                return true;
-              }
-
-              switch (String(filter.value).toLowerCase()) {
-                case "null":
-                  return field.nullable;
-
-                case "valid":
-                  return !field.nullable;
-
-                default:
-                  return true;
-              }
-            })
-            .map((field) => `- ${field.name.toUpperCase()}`);
-
-          fields.unshift(`${model.name.toUpperCase()} ATTRIBUTES:\n`);
-
-          await ctx.sendList(fields);
-        },
+        const identifierText = textOf(identifier);
+        await host.createModel(model, identifierText);
+        await context.send(
+          `Created \`${identifierText}\` ${model.name.toLowerCase()}`,
+        );
       },
-    };
-  };
+
+      async delete(
+        context: PitchScriptCommandContext,
+        modelToken?: PitchScriptValue,
+        identifier?: PitchScriptValue,
+      ) {
+        const model = ensureModel(modelToken);
+        if (!identifier) missingArgument("delete");
+
+        const identifierText = textOf(identifier);
+        const record = await host.getModel(model, identifierText);
+        await host.deleteRecord(record);
+        await context.send(
+          `Deleted \`${identifierText}\` ${model.name.toLowerCase()}`,
+        );
+      },
+
+      async update(
+        context: PitchScriptCommandContext,
+        modelToken?: PitchScriptValue,
+        identifier?: PitchScriptValue,
+        attributeToken?: PitchScriptValue,
+        valueToken?: PitchScriptValue,
+      ) {
+        const model = ensureModel(modelToken);
+        if (!identifier || !attributeToken) missingArgument("update");
+
+        const identifierText = textOf(identifier);
+        const attributeName = attributeToken.name.toLowerCase();
+        if (!host.hasAttribute(model, attributeName)) {
+          throw new Error(
+            `'${attributeName}' is not a valid ${model.name} attribute\n` +
+              `Run \`ATTRIBUTES > ${model.name}\` to see a list of all attributes for that model`,
+          );
+        }
+
+        const record = await host.getModel(model, identifierText);
+        let fieldName = attributeName;
+        let newValue: unknown = valueToken ? valueOf(valueToken) : null;
+
+        if (
+          valueToken === undefined &&
+          (host.getFields(model).find((field) => field.name.toLowerCase() === attributeName)?.typeName === "CharField") &&
+          host.getFields(model).find((field) => field.name.toLowerCase() === attributeName)?.maxLength === 200 &&
+          (_shared.attachments.length > 0)
+        ) {
+          const attachment = _shared.attachments.shift();
+          const savedPath = await host.saveAttachment(attachment);
+          newValue = host.uploadedImageValue(savedPath);
+        }
+
+        if (attributeToken.type === ValueType.MODEL) {
+          fieldName = `${attributeName}_id`;
+          if (valueToken) {
+            const related = await host.getModel(
+              attributeToken,
+              textOf(valueToken),
+            );
+            newValue = host.getPrimaryKey(related);
+          }
+        }
+
+        host.setRecordValue(record, fieldName, newValue);
+        await host.saveRecord(record, [fieldName]);
+
+        const suffix = valueToken
+          ? ` to \`${valueToken.name}\``
+          : "";
+        await context.send(
+          `Updated \`${identifierText}'s\` ${attributeToken.name}${suffix}`,
+        );
+      },
+
+      async view(
+        context: PitchScriptCommandContext,
+        modelToken?: PitchScriptValue,
+        identifier?: PitchScriptValue,
+        attributeToken?: PitchScriptValue,
+      ) {
+        const model = ensureModel(modelToken);
+        if (!identifier) missingArgument("view");
+
+        const record = await host.getModel(model, textOf(identifier));
+
+        if (!attributeToken) {
+          const output: string[] = ["```"];
+          const files: string[] = [];
+
+          for (const [key, value] of host.getRecordEntries(record)) {
+            output.push(`${key}: ${host.formatValue(value)}`);
+            if (typeof value === "string" && host.isImage(value)) {
+              files.push(host.imagePath(value));
+            }
+          }
+
+          output.push("```");
+          await context.send(output.join("\n"), files);
+          return;
+        }
+
+        const attributeName = attributeToken.name.toLowerCase();
+        if (!host.hasAttribute(model, attributeName)) {
+          throw new Error(
+            `'${attributeName}' is not a valid ${model.name} attribute\n` +
+              `Run \`ATTRIBUTES > ${model.name}\` to see a list of all attributes for that model`,
+          );
+        }
+
+        let result = host.getRecordValue(record, attributeName);
+
+        if (attributeToken.type === ValueType.MODEL) {
+          const identifierField = attributeToken.extraData[0];
+          if (typeof identifierField === "string") {
+            result = await host.getRelatedIdentifiers(result, identifierField);
+          }
+        }
+
+        if (typeof result === "string" && host.isImage(result)) {
+          await context.send(
+            `\`\`\`${result}\`\`\``,
+            [host.imagePath(result)],
+          );
+          return;
+        }
+
+        await context.send(`\`\`\`${host.formatValue(result)}\`\`\``);
+      },
+
+      async attributes(
+        context: PitchScriptCommandContext,
+        modelToken?: PitchScriptValue,
+        filterToken?: PitchScriptValue,
+      ) {
+        const model = ensureModel(modelToken);
+        const filter = filterToken?.value;
+
+        const fields = host
+          .getFields(model)
+          .filter((field) => field.typeName !== "BackwardFKRelation")
+          .filter((field) => {
+            if (filter === undefined || filter === null) return true;
+            const normalized = String(filter).toLowerCase();
+            if (normalized === "null") return field.nullable;
+            if (normalized === "valid") return !field.nullable;
+            return true;
+          })
+          .map((field) => `- ${field.name.toUpperCase()}`);
+
+        fields.unshift(`${model.name.toUpperCase()} ATTRIBUTES:`);
+        await context.sendList(fields);
+      },
+    },
+  });
 }
